@@ -18,85 +18,61 @@ class EmbedController {
 
   Future<void> removeMoreOptionsAndShareButtons() async {
     await controller.evaluateJavascript(source: """
-              var style = document.createElement('style');
-              style.textContent = `
-                .ytp-overflow-button,
-                .ytp-youtube-button,
-                .ytp-share-button,
-                .ytp-menuitem[role="menuitem"][data-layer="menu-popup"],
-                .ytp-button[data-title-no-tooltip="Share"],
-                .ytp-button[aria-label*="Share"],
-                .ytp-menuitem[aria-label*="More options"],
-                .ytp-menuitem[aria-label*="خيارات إضافية"],
-                .ytp-button[aria-label*="مشاركة"],
-                .ytp-chrome-top-buttons,
-                .ytp-watch-later-button,
-                .ytp-watermark,
-              {
-                display: none !important;
-              }
-              `;
-              document.head.appendChild(style);
+    function hideElements() {
+      const selectors = [
+        '.ytp-overflow-button',
+        '.ytp-youtube-button',
+        '.ytp-share-button',
+        '.ytp-watch-later-button',
+        '.ytp-watermark',
+        '.ytp-chrome-top-buttons',
+        '.ytp-impression-link img',
+        'a[href*="youtube.com"]',
+        '#bottom-sheet',
+      ];
 
-              function removeUnwantedElements() {
-                // Remove elements by class and data attributes
-                const elementsToRemove = [
-                  '.ytp-overflow-button',
-                  '.ytp-youtube-button',
-                  '.ytp-share-button',
-                  '.ytp-menuitem[role="menuitem"][data-layer="menu-popup"]',
-                  '.ytp-chrome-top-buttons',
-                  '.ytp-watch-later-button',
-                  '.ytp-watermark',
-                  '.ytp-button[aria-label*="المشاهدة على"]', 
-                  '.ytp-impression-link img' 
-                ];
+      selectors.forEach(sel => {
+        document.querySelectorAll(sel).forEach(el => el.remove());
+      });
 
-                elementsToRemove.forEach(selector => {
-                  const elements = document.querySelectorAll(selector);
-                  elements.forEach(el => el.remove());
-                });
+      // Block click events on share/overflow buttons
+      const blockSelectors = [
+        '.ytp-share-button',
+        '.ytp-overflow-button',
+        '.ytp-button[aria-label*="Share"]',
+        '.ytp-button[aria-label*="مشاركة"]'
+      ];
+      blockSelectors.forEach(sel => {
+        document.querySelectorAll(sel).forEach(btn => {
+          btn.style.display = 'none';
+          btn.onclick = (e) => { e.stopImmediatePropagation(); e.preventDefault(); return false; };
+        });
+      });
 
-                // Remove settings menu items
-                const settingsMenu = document.querySelector('.ytp-settings-menu');
-                if (settingsMenu) {
-                  const menuItems = settingsMenu.querySelectorAll('.ytp-menuitem');
-                  menuItems.forEach(item => {
-                    const ariaLabel = item.getAttribute('aria-label') || '';
-                    if (
-                      ariaLabel.includes('More options') || 
-                      ariaLabel.includes('خيارات إضافية') ||
-                      ariaLabel.includes('Watch on') ||
-                      ariaLabel.includes('شاهد على') ||
-                      ariaLabel.includes('المشاهدة على') || 
-                      item.textContent.includes('More options') ||
-                      item.textContent.includes('خيارات إضافية') ||
-                      item.textContent.includes('Watch on') ||
-                      item.textContent.includes('شاهد على') ||
-                      item.textContent.includes('المشاهدة على') 
-                    ) {
-                      item.remove();
-                    }
-                  });
-                }
-              }
+      // Hide YouTube bottom sheet if injected
+      const bs = document.querySelector('#bottom-sheet');
+      if (bs) {
+        bs.remove();
+      }
+    }
 
-              // Initial removal
-              removeUnwantedElements();
+    // Initial call
+    hideElements();
 
-              // Create an observer instance
-              const observer = new MutationObserver((mutations) => {
-                removeUnwantedElements();
-              });
+    // Observe document + shadow roots
+    const observer = new MutationObserver(() => {
+      hideElements();
+      document.querySelectorAll('*').forEach(el => {
+        if (el.shadowRoot) {
+          el.shadowRoot.querySelectorAll('.ytp-share-button,.ytp-overflow-button').forEach(btn => {
+            btn.remove();
+          });
+        }
+      });
+    });
 
-              // Start observing the document with the configured parameters
-              observer.observe(document.body, {
-                childList: true,
-                subtree: true,
-                characterData: true,
-                attributes: true
-              });
-              """);
+    observer.observe(document, { childList: true, subtree: true });
+  """);
   }
 
   Future<void> onFullScreenStateChanged({
