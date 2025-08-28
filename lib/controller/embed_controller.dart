@@ -100,78 +100,53 @@ class EmbedController {
     })();
     """);
   }
-  Future<void> replaceSettingsWithCustomControls() async {
+  Future<void> removeSettingsButton() async {
     await controller.evaluateJavascript(source: """
     (function() {
-      function injectCustomButtons() {
-        const controls = document.querySelector('.ytp-right-controls');
-        if (!controls) return;
+      const KILL_SELECTOR = '.ytp-settings-button';
 
-        // Remove default settings button if it exists
-        const settingsBtn = controls.querySelector('.ytp-settings-button');
-        if (settingsBtn) settingsBtn.remove();
+      function nukeSettings(root=document) {
+        try {
+          root.querySelectorAll(KILL_SELECTOR).forEach(el => el.remove());
+        } catch(e){}
+      }
 
-        // Avoid duplicates
-        if (document.querySelector('#custom-speed-btn') || document.querySelector('#custom-quality-btn')) return;
-
-        // Create Speed button
-        const speedBtn = document.createElement('button');
-        speedBtn.id = 'custom-speed-btn';
-        speedBtn.className = 'ytp-button';
-        speedBtn.innerHTML = '⚡';
-        speedBtn.title = 'Change Speed';
-
-        speedBtn.onclick = function(e) {
-          e.stopPropagation();
-          e.preventDefault();
-          const video = document.querySelector('video');
-          if (!video) return;
-          const speeds = [0.5, 1, 1.5, 2];
-          let idx = speeds.indexOf(video.playbackRate);
-          let next = speeds[(idx + 1) % speeds.length];
-          video.playbackRate = next;
-        };
-
-        // Create Quality button
-        const qualityBtn = document.createElement('button');
-        qualityBtn.id = 'custom-quality-btn';
-        qualityBtn.className = 'ytp-button';
-        qualityBtn.innerHTML = '📺';
-        qualityBtn.title = 'Change Quality';
-
-        qualityBtn.onclick = function(e) {
-          e.stopPropagation();
-          e.preventDefault();
-          // NOTE: true quality switching requires the YouTube IFrame API.
-          // For now we can just notify or attempt to force HD.
-          try {
-            ytplayer.config.args['vq'] = 'hd1080';
-            console.log("Quality forced to 1080p");
-          } catch(err) {
-            console.log("Quality change not supported in this embed");
-          }
-        };
-
-        // Insert before fullscreen button
-        const fullscreenBtn = controls.querySelector('.ytp-fullscreen-button');
-        if (fullscreenBtn) {
-          controls.insertBefore(speedBtn, fullscreenBtn);
-          controls.insertBefore(qualityBtn, fullscreenBtn);
-        } else {
-          controls.appendChild(speedBtn);
-          controls.appendChild(qualityBtn);
+      function hideWithCss() {
+        const styleId = 'kill-settings-style';
+        if (!document.getElementById(styleId)) {
+          const style = document.createElement('style');
+          style.id = styleId;
+          style.innerHTML = KILL_SELECTOR + ' { display: none !important; visibility: hidden !important; }';
+          document.head.appendChild(style);
         }
       }
 
-      // Inject once
-      injectCustomButtons();
+      // Initial nuke
+      nukeSettings();
+      hideWithCss();
 
-      // Observe player bar for changes (so settings btn won’t come back)
-      const obs = new MutationObserver(() => {
-        injectCustomButtons();
-      });
-      const bar = document.querySelector('.ytp-right-controls');
-      if (bar) obs.observe(bar, { childList: true, subtree: true });
+      // Observe the player controls
+      const controls = document.querySelector('.ytp-right-controls');
+      if (controls) {
+        new MutationObserver(() => {
+          nukeSettings();
+        }).observe(controls, { childList: true, subtree: true });
+      }
+
+      // Global observer (for future injected buttons)
+      new MutationObserver(() => {
+        nukeSettings();
+      }).observe(document.documentElement, { childList: true, subtree: true });
+
+      // Extra safety: intercept clicks (in case ghost element remains)
+      document.addEventListener("click", e => {
+        if (e.target.closest(KILL_SELECTOR)) {
+          e.stopImmediatePropagation();
+          e.preventDefault();
+          return false;
+        }
+      }, true);
+
     })();
   """);
   }
