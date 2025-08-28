@@ -113,7 +113,7 @@ class _YoutubePlayerEmbedState extends State<YoutubePlayerEmbed> {
 
             //// HIDE VIDEO TITLE
             await embedController?.hidenVideoTitle(hiden: true);
-            await embedController?.killSettingsButton();
+            await embedController?.forceHideSettingsButton();
 
             //// REMOVE CHANNEL IMAGE
             await embedController?.removeChannleImage(

@@ -100,17 +100,11 @@ class EmbedController {
     })();
     """);
   }
-  Future<void> killSettingsButton() async {
+  Future<void> forceHideSettingsButton() async {
     await controller.evaluateJavascript(source: """
     (function() {
-      var SELECTOR = '.ytp-settings-button';
-
-      function injectStyle() {
-        var styleId = 'no-settings-btn-style';
-        if (document.getElementById(styleId)) return;
-        var style = document.createElement('style');
-        style.id = styleId;
-        style.innerHTML = SELECTOR + ` {
+      const css = `
+        .ytp-settings-button {
           display: none !important;
           visibility: hidden !important;
           opacity: 0 !important;
@@ -118,35 +112,36 @@ class EmbedController {
           width: 0 !important;
           height: 0 !important;
           overflow: hidden !important;
-        }`;
+        }
+      `;
+
+      // Inject CSS once
+      if (!document.getElementById('hide-settings-style')) {
+        const style = document.createElement('style');
+        style.id = 'hide-settings-style';
+        style.textContent = css;
         document.head.appendChild(style);
       }
 
-      // Run now
-      injectStyle();
-      document.querySelectorAll(SELECTOR).forEach(function(el) {
-        el.style.display = "none";
-        el.remove();
-      });
-
-      // Keep hammering it
-      var obs = new MutationObserver(function() {
-        document.querySelectorAll(SELECTOR).forEach(function(el) {
-          el.style.display = "none";
-          el.remove();
+      // MutationObserver to keep killing
+      const kill = () => {
+        document.querySelectorAll('.ytp-settings-button').forEach(el => {
+          el.style.setProperty('display', 'none', 'important');
+          el.style.setProperty('visibility', 'hidden', 'important');
+          el.style.setProperty('opacity', '0', 'important');
+          el.style.setProperty('pointer-events', 'none', 'important');
+          el.style.setProperty('width', '0', 'important');
+          el.style.setProperty('height', '0', 'important');
+          el.style.setProperty('overflow', 'hidden', 'important');
         });
-        injectStyle();
-      });
-      obs.observe(document.documentElement, { childList: true, subtree: true });
+      };
 
-      // Block clicks anyway
-      document.addEventListener("click", function(e) {
-        if (e.target.closest(SELECTOR)) {
-          e.stopImmediatePropagation();
-          e.preventDefault();
-          return false;
-        }
-      }, true);
+      // Run once now
+      kill();
+
+      // Keep watching for respawns
+      new MutationObserver(kill)
+        .observe(document.documentElement, { childList: true, subtree: true });
     })();
   """);
   }
