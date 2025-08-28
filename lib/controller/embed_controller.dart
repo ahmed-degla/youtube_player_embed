@@ -16,93 +16,85 @@ class EmbedController {
     );
   }
 
+
   Future<void> removeMoreOptionsAndShareButtons() async {
     await controller.evaluateJavascript(source: """
     (function() {
-      function injectGlobalStyle() {
-        if (document.getElementById('kill-youtube-style')) return;
-        var style = document.createElement('style');
-        style.id = 'kill-youtube-style';
-        style.textContent = \`
-          .ytp-share-button,
-          .ytp-overflow-button,
-          .ytp-watch-later-button,
-          .ytp-watermark,
-          .ytp-youtube-button,
-          .ytp-chrome-top-buttons,
-          #bottom-sheet,
-          [aria-label*="Share"],
-          [aria-label*="مشاركة"],
-          [aria-label*="More options"],
-          [aria-label*="خيارات إضافية"],
-          tp-yt-paper-item:has(> .yt-simple-endpoint[title*="More options"]),
-          tp-yt-paper-item:has(> .yt-simple-endpoint[title*="خيارات إضافية"]),
-          .ytp-menuitem:has(.ytp-menuitem-label:contains("More options")),
-          .ytp-menuitem:has(.ytp-menuitem-label:contains("خيارات إضافية")) {
-            display: none !important;
-            visibility: hidden !important;
-            pointer-events: none !important;
-            opacity: 0 !important;
-          }
-        \`;
-        document.head.appendChild(style);
-      }
+      const KILL_SELECTORS = [
+        '.ytp-overflow-button',                   // More options button in controls
+        '.ytp-share-button',                      // Share button in controls
+        '.ytp-watch-later-button',                // Watch later
+        '.ytp-watermark',                         // YouTube watermark
+        '.ytp-youtube-button',                    // Logo button
+        '.ytp-chrome-top-buttons',                // Top-right chrome controls
+        '#bottom-sheet',                          // Bottom sheet menus
+        'tp-yt-paper-item[title*="More options"]',
+        'tp-yt-paper-item[title*="خيارات إضافية"]',
+        'tp-yt-paper-item[title*="Share"]',
+        'tp-yt-paper-item[title*="مشاركة"]',
+        '[aria-label*="Share"]',
+        '[aria-label*="مشاركة"]',
+        '[aria-label*="More options"]',
+        '[aria-label*="خيارات إضافية"]'
+      ];
 
-      function blockClicks() {
-        document.querySelectorAll(
-          '.ytp-share-button, .ytp-overflow-button, [aria-label*="Share"], [aria-label*="مشاركة"], [aria-label*="More options"], [aria-label*="خيارات إضافية"]'
-        ).forEach(btn => {
-          btn.style.display = 'none';
-          btn.onclick = (e) => { e.stopImmediatePropagation(); e.preventDefault(); return false; };
+      function nukeElements(root=document) {
+        KILL_SELECTORS.forEach(sel => {
+          try {
+            root.querySelectorAll(sel).forEach(el => {
+              el.remove();
+            });
+          } catch(e){}
         });
       }
 
-      function nukeBottomSheet() {
-        const sheet = document.querySelector('#bottom-sheet');
-        if (sheet) sheet.remove();
+      function blockClicks() {
+        KILL_SELECTORS.forEach(sel => {
+          try {
+            document.querySelectorAll(sel).forEach(el => {
+              el.style.display = "none";
+              el.onclick = (e) => { e.stopImmediatePropagation(); e.preventDefault(); return false; };
+              el.addEventListener("click", e => { e.stopImmediatePropagation(); e.preventDefault(); return false; }, true);
+            });
+          } catch(e){}
+        });
       }
 
-      function deepClean(root) {
-        if (!root) return;
-        try {
-          root.querySelectorAll(
-            '.ytp-share-button,.ytp-overflow-button,[aria-label*="Share"],[aria-label*="مشاركة"],[aria-label*="More options"],[aria-label*="خيارات إضافية"],#bottom-sheet'
-          ).forEach(el => el.remove());
-        } catch (e) {}
-      }
+      // Run once
+      nukeElements();
+      blockClicks();
 
+      // Keep cleaning
+      const obs = new MutationObserver(() => {
+        nukeElements();
+        blockClicks();
+      });
+      obs.observe(document.documentElement, { childList: true, subtree: true });
+
+      // Handle shadow roots
       function observeShadowRoots(node) {
         if (node.shadowRoot) {
           new MutationObserver(() => {
-            deepClean(node.shadowRoot);
+            nukeElements(node.shadowRoot);
           }).observe(node.shadowRoot, { childList: true, subtree: true });
         }
         node.childNodes.forEach(observeShadowRoots);
       }
+      document.querySelectorAll('*').forEach(observeShadowRoots);
 
-      injectGlobalStyle();
-      blockClicks();
-      nukeBottomSheet();
-
-      const obs = new MutationObserver(() => {
-        injectGlobalStyle();
-        blockClicks();
-        nukeBottomSheet();
-        document.querySelectorAll('*').forEach(observeShadowRoots);
-      });
-      obs.observe(document.documentElement, { childList: true, subtree: true });
-
+      // Handle iframes
       document.querySelectorAll('iframe').forEach(frame => {
         try {
           const doc = frame.contentDocument || frame.contentWindow.document;
           new MutationObserver(() => {
-            deepClean(doc);
+            nukeElements(doc);
           }).observe(doc, { childList: true, subtree: true });
-        } catch(e) {}
+        } catch(e){}
       });
     })();
   """);
   }
+
 
   Future<void> onFullScreenStateChanged({
     required Function(VideoState state)? onVideoStateChange,
