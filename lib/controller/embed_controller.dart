@@ -100,53 +100,53 @@ class EmbedController {
     })();
     """);
   }
-  Future<void> removeSettingsButton() async {
+  Future<void> killSettingsButton() async {
     await controller.evaluateJavascript(source: """
     (function() {
-      const KILL_SELECTOR = '.ytp-settings-button';
+      var SELECTOR = '.ytp-settings-button';
 
-      function nukeSettings(root=document) {
-        try {
-          root.querySelectorAll(KILL_SELECTOR).forEach(el => el.remove());
-        } catch(e){}
+      function injectStyle() {
+        var styleId = 'no-settings-btn-style';
+        if (document.getElementById(styleId)) return;
+        var style = document.createElement('style');
+        style.id = styleId;
+        style.innerHTML = SELECTOR + ` {
+          display: none !important;
+          visibility: hidden !important;
+          opacity: 0 !important;
+          pointer-events: none !important;
+          width: 0 !important;
+          height: 0 !important;
+          overflow: hidden !important;
+        }`;
+        document.head.appendChild(style);
       }
 
-      function hideWithCss() {
-        const styleId = 'kill-settings-style';
-        if (!document.getElementById(styleId)) {
-          const style = document.createElement('style');
-          style.id = styleId;
-          style.innerHTML = KILL_SELECTOR + ' { display: none !important; visibility: hidden !important; }';
-          document.head.appendChild(style);
-        }
-      }
+      // Run now
+      injectStyle();
+      document.querySelectorAll(SELECTOR).forEach(function(el) {
+        el.style.display = "none";
+        el.remove();
+      });
 
-      // Initial nuke
-      nukeSettings();
-      hideWithCss();
+      // Keep hammering it
+      var obs = new MutationObserver(function() {
+        document.querySelectorAll(SELECTOR).forEach(function(el) {
+          el.style.display = "none";
+          el.remove();
+        });
+        injectStyle();
+      });
+      obs.observe(document.documentElement, { childList: true, subtree: true });
 
-      // Observe the player controls
-      const controls = document.querySelector('.ytp-right-controls');
-      if (controls) {
-        new MutationObserver(() => {
-          nukeSettings();
-        }).observe(controls, { childList: true, subtree: true });
-      }
-
-      // Global observer (for future injected buttons)
-      new MutationObserver(() => {
-        nukeSettings();
-      }).observe(document.documentElement, { childList: true, subtree: true });
-
-      // Extra safety: intercept clicks (in case ghost element remains)
-      document.addEventListener("click", e => {
-        if (e.target.closest(KILL_SELECTOR)) {
+      // Block clicks anyway
+      document.addEventListener("click", function(e) {
+        if (e.target.closest(SELECTOR)) {
           e.stopImmediatePropagation();
           e.preventDefault();
           return false;
         }
       }, true);
-
     })();
   """);
   }
