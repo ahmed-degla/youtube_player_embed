@@ -18,60 +18,86 @@ class EmbedController {
 
   Future<void> removeMoreOptionsAndShareButtons() async {
     await controller.evaluateJavascript(source: """
-    function hideElements() {
-      const selectors = [
-        '.ytp-overflow-button',
-        '.ytp-youtube-button',
-        '.ytp-share-button',
-        '.ytp-watch-later-button',
-        '.ytp-watermark',
-        '.ytp-chrome-top-buttons',
-        '.ytp-impression-link img',
-        'a[href*="youtube.com"]',
-        '#bottom-sheet',
-      ];
+    (function() {
+      function injectGlobalStyle() {
+        if (document.getElementById('kill-youtube-style')) return;
+        var style = document.createElement('style');
+        style.id = 'kill-youtube-style';
+        style.textContent = \`
+          .ytp-share-button,
+          .ytp-overflow-button,
+          .ytp-watch-later-button,
+          .ytp-watermark,
+          .ytp-youtube-button,
+          .ytp-chrome-top-buttons,
+          #bottom-sheet,
+          [aria-label*="Share"],
+          [aria-label*="مشاركة"],
+          [aria-label*="More options"],
+          [aria-label*="خيارات إضافية"] {
+            display: none !important;
+            visibility: hidden !important;
+            pointer-events: none !important;
+            opacity: 0 !important;
+          }
+        \`;
+        document.head.appendChild(style);
+      }
 
-      selectors.forEach(sel => {
-        document.querySelectorAll(sel).forEach(el => el.remove());
-      });
-
-      // Block click events on share/overflow buttons
-      const blockSelectors = [
-        '.ytp-share-button',
-        '.ytp-overflow-button',
-        '.ytp-button[aria-label*="Share"]',
-        '.ytp-button[aria-label*="مشاركة"]'
-      ];
-      blockSelectors.forEach(sel => {
-        document.querySelectorAll(sel).forEach(btn => {
+      function blockClicks() {
+        document.querySelectorAll('.ytp-share-button, .ytp-overflow-button, [aria-label*="Share"], [aria-label*="مشاركة"]').forEach(btn => {
           btn.style.display = 'none';
           btn.onclick = (e) => { e.stopImmediatePropagation(); e.preventDefault(); return false; };
         });
-      });
-
-      // Hide YouTube bottom sheet if injected
-      const bs = document.querySelector('#bottom-sheet');
-      if (bs) {
-        bs.remove();
       }
-    }
 
-    // Initial call
-    hideElements();
+      function nukeBottomSheet() {
+        const sheet = document.querySelector('#bottom-sheet');
+        if (sheet) sheet.remove();
+      }
 
-    // Observe document + shadow roots
-    const observer = new MutationObserver(() => {
-      hideElements();
-      document.querySelectorAll('*').forEach(el => {
-        if (el.shadowRoot) {
-          el.shadowRoot.querySelectorAll('.ytp-share-button,.ytp-overflow-button').forEach(btn => {
-            btn.remove();
+      function deepClean(root) {
+        if (!root) return;
+        try {
+          root.querySelectorAll('.ytp-share-button,.ytp-overflow-button,[aria-label*="Share"],[aria-label*="مشاركة"],#bottom-sheet').forEach(el => {
+            el.remove();
           });
-        }
-      });
-    });
+        } catch (e) {}
+      }
 
-    observer.observe(document, { childList: true, subtree: true });
+      function observeShadowRoots(node) {
+        if (node.shadowRoot) {
+          new MutationObserver(() => {
+            deepClean(node.shadowRoot);
+          }).observe(node.shadowRoot, { childList: true, subtree: true });
+        }
+        node.childNodes.forEach(observeShadowRoots);
+      }
+
+      // Run once now
+      injectGlobalStyle();
+      blockClicks();
+      nukeBottomSheet();
+
+      // Keep observing DOM
+      const obs = new MutationObserver(() => {
+        injectGlobalStyle();
+        blockClicks();
+        nukeBottomSheet();
+        document.querySelectorAll('*').forEach(observeShadowRoots);
+      });
+      obs.observe(document.documentElement, { childList: true, subtree: true });
+
+      // Also handle iframes (bottom sheet sometimes injected inside)
+      document.querySelectorAll('iframe').forEach(frame => {
+        try {
+          const doc = frame.contentDocument || frame.contentWindow.document;
+          new MutationObserver(() => {
+            deepClean(doc);
+          }).observe(doc, { childList: true, subtree: true });
+        } catch(e) {}
+      });
+    })();
   """);
   }
 
