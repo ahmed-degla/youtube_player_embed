@@ -10,23 +10,22 @@ class EmbedController {
   }) async {
     await controller.evaluateJavascript(
       source: """
-                document.querySelector('a.ytp-title-link').innerText = '${customVideoTitle}';
-                document.querySelector('.ytp-title-text').firstChild.text = '${customVideoTitle}';
-              """,
+        document.querySelector('a.ytp-title-link').innerText = '${customVideoTitle}';
+        document.querySelector('.ytp-title-text').firstChild.text = '${customVideoTitle}';
+      """,
     );
   }
-
 
   Future<void> removeMoreOptionsAndShareButtons() async {
     await controller.evaluateJavascript(source: """
     (function() {
       const KILL_SELECTORS = [
-        '.ytp-overflow-button',                   // More options button in controls
-        '.ytp-share-button',                      // Share button in controls
+        '.ytp-overflow-button',                   // More options button
+        '.ytp-share-button',                      // Share button
         '.ytp-watch-later-button',                // Watch later
-        '.ytp-watermark',                         // YouTube watermark
-        '.ytp-youtube-button',                    // Logo button
-        '.ytp-chrome-top-buttons',                // Top-right chrome controls
+        '.ytp-watermark',                         // Watermark
+        '.ytp-youtube-button',                    // Logo
+        '.ytp-chrome-top-buttons',                // Top-right controls
         '#bottom-sheet',                          // Bottom sheet menus
         'tp-yt-paper-item[title*="More options"]',
         'tp-yt-paper-item[title*="خيارات إضافية"]',
@@ -41,9 +40,7 @@ class EmbedController {
       function nukeElements(root=document) {
         KILL_SELECTORS.forEach(sel => {
           try {
-            root.querySelectorAll(sel).forEach(el => {
-              el.remove();
-            });
+            root.querySelectorAll(sel).forEach(el => el.remove());
           } catch(e){}
         });
       }
@@ -59,6 +56,15 @@ class EmbedController {
           } catch(e){}
         });
       }
+
+      // Global click interceptor (kills even recreated buttons)
+      document.addEventListener("click", e => {
+        if (e.target.closest('.ytp-overflow-button,[aria-label*="More options"],[aria-label*="خيارات إضافية"],.ytp-share-button,[aria-label*="Share"],[aria-label*="مشاركة"]')) {
+          e.stopImmediatePropagation();
+          e.preventDefault();
+          return false;
+        }
+      }, true);
 
       // Run once
       nukeElements();
@@ -92,29 +98,25 @@ class EmbedController {
         } catch(e){}
       });
     })();
-  """);
+    """);
   }
-
 
   Future<void> onFullScreenStateChanged({
     required Function(VideoState state)? onVideoStateChange,
   }) async {
-    // Inject JavaScript to listen for fullscreen changes
     await controller.evaluateJavascript(source: """
-    document.addEventListener('fullscreenchange', function() {
-      if (document.fullscreenElement) {
-        window.flutter_inappwebview.callHandler('onEnterFullscreen');
-      } else {
-        window.flutter_inappwebview.callHandler('onExitFullscreen');
-      }
-    });
-  """);
+      document.addEventListener('fullscreenchange', function() {
+        if (document.fullscreenElement) {
+          window.flutter_inappwebview.callHandler('onEnterFullscreen');
+        } else {
+          window.flutter_inappwebview.callHandler('onExitFullscreen');
+        }
+      });
+    """);
 
-    // Register JavaScript handlers for fullscreen events
     controller.addJavaScriptHandler(
       handlerName: 'onEnterFullscreen',
       callback: (args) {
-        // Notify Flutter when entering fullscreen
         if (onVideoStateChange != null) {
           onVideoStateChange.call(VideoState.fullscreen);
         }
@@ -124,7 +126,6 @@ class EmbedController {
     controller.addJavaScriptHandler(
       handlerName: 'onExitFullscreen',
       callback: (args) {
-        // Notify Flutter when exiting fullscreen
         if (onVideoStateChange != null) {
           onVideoStateChange.call(VideoState.normalView);
         }
@@ -135,66 +136,41 @@ class EmbedController {
   Future<void> createVideoListeners() async {
     await controller.evaluateJavascript(
       source: """
-                // Ensure the video element is loaded
-                const checkVideoElement = () => {
-                  const video = document.querySelector('video');
-                  if (video) {
-                    console.log('Video element found.');
-
-                    // video.addEventListener('click',() => {});
-
-                    // Add event listeners for video state changes
-                    video.addEventListener('play', () => {
-                      console.log('Video is playing.');
-                      window.flutter_inappwebview.callHandler('onVideoStateChange', 'playing');
-                    });
-
-                    //// Add event listeners for video pause
-                    video.addEventListener('pause', () => {
-                      console.log('Video is paused.');
-                      if(!video.ended){
-                        window.flutter_inappwebview.callHandler('onVideoStateChange', 'paused');
-                      }
-                    });
-
-                    //// Add event listeners for video end
-                    video.addEventListener('ended', () => {
-                      console.log('Video ended.');
-                      window.flutter_inappwebview.callHandler('onVideoEnd');
-                    });
-
-                    //// add event listeners for video seek
-                    video.addEventListener('seeking', () => {
-                      console.log('Video seeking to: ', video.currentTime);
-                      window.flutter_inappwebview.callHandler('onVideoSeek', video.currentTime);
-                    });
-
-                    //// add event listeners for video time update
-                    video.addEventListener('timeupdate', () => {
-                      console.log('Current video time: ', video.currentTime);
-                      window.flutter_inappwebview.callHandler('onVideoTimeUpdate', video.currentTime);
-                    });
-
-                    // Detect mute and unmute events using the 'muted' property
-                    let wasMuted = video.muted;
-                    setInterval(() => {
-                      if (video.muted && !wasMuted) {
-                        console.log('Video muted.');
-                        window.flutter_inappwebview.callHandler('onVideoStateChange', 'muted');
-                      } else if (!video.muted && wasMuted) {
-                        console.log('Video unmuted.');
-                        window.flutter_inappwebview.callHandler('onVideoStateChange', 'unmuted');
-                      }
-                      wasMuted = video.muted;
-                    }, 500);
-                  } else {
-                    console.log('Video element not found. Retrying...');
-                    setTimeout(checkVideoElement, 500); // Retry until video is available
-                  }
-                };
-                // Start checking for the video element
-                checkVideoElement();
-                """,
+        const checkVideoElement = () => {
+          const video = document.querySelector('video');
+          if (video) {
+            video.addEventListener('play', () => {
+              window.flutter_inappwebview.callHandler('onVideoStateChange', 'playing');
+            });
+            video.addEventListener('pause', () => {
+              if(!video.ended){
+                window.flutter_inappwebview.callHandler('onVideoStateChange', 'paused');
+              }
+            });
+            video.addEventListener('ended', () => {
+              window.flutter_inappwebview.callHandler('onVideoEnd');
+            });
+            video.addEventListener('seeking', () => {
+              window.flutter_inappwebview.callHandler('onVideoSeek', video.currentTime);
+            });
+            video.addEventListener('timeupdate', () => {
+              window.flutter_inappwebview.callHandler('onVideoTimeUpdate', video.currentTime);
+            });
+            let wasMuted = video.muted;
+            setInterval(() => {
+              if (video.muted && !wasMuted) {
+                window.flutter_inappwebview.callHandler('onVideoStateChange', 'muted');
+              } else if (!video.muted && wasMuted) {
+                window.flutter_inappwebview.callHandler('onVideoStateChange', 'unmuted');
+              }
+              wasMuted = video.muted;
+            }, 500);
+          } else {
+            setTimeout(checkVideoElement, 500);
+          }
+        };
+        checkVideoElement();
+      """,
     );
   }
 
@@ -206,27 +182,15 @@ class EmbedController {
       callback: (args) {
         final String state = args.first;
         VideoState? videoState;
-
         switch (state) {
-          case 'playing':
-            videoState = VideoState.playing;
-            break;
-          case 'paused':
-            videoState = VideoState.paused;
-            break;
-          case 'muted':
-            videoState = VideoState.muted;
-            break;
-          case 'unmuted':
-            videoState = VideoState.unmuted;
-            break;
+          case 'playing': videoState = VideoState.playing; break;
+          case 'paused': videoState = VideoState.paused; break;
+          case 'muted': videoState = VideoState.muted; break;
+          case 'unmuted': videoState = VideoState.unmuted; break;
         }
-
         if (videoState != null) {
           onVideoStateChange?.call(videoState);
-          print('<<< Video state changed: $state >>>');
         }
-
         return null;
       },
     );
@@ -239,9 +203,7 @@ class EmbedController {
       handlerName: 'onVideoTimeUpdate',
       callback: (args) {
         final currentTime = args.first as double;
-
         onVideoTimeUpdate?.call(currentTime);
-
         return null;
       },
     );
@@ -254,9 +216,7 @@ class EmbedController {
       handlerName: 'onVideoSeek',
       callback: (args) {
         final currentTime = args.first as double;
-
         onVideoSeek?.call(currentTime);
-
         return null;
       },
     );
@@ -269,7 +229,6 @@ class EmbedController {
       handlerName: 'onVideoEnd',
       callback: (args) {
         onVideoEnd?.call();
-
         return null;
       },
     );
@@ -278,9 +237,9 @@ class EmbedController {
   Future<void> removeYoutubeWatermark() async {
     await controller.evaluateJavascript(
       source: """
-                document.querySelector('.ytp-watermark').style.display = 'none';  
-                decument.querySelector('.ytp-impression-link ').style.display = 'none';
-                """,
+        document.querySelector('.ytp-watermark')?.remove();  
+        document.querySelector('.ytp-impression-link')?.remove();
+      """,
     );
   }
 
@@ -290,8 +249,8 @@ class EmbedController {
     if (hidenChannelImage) {
       await controller.evaluateJavascript(
         source: """
-                document.querySelector('.ytp-title-channel').style.display = 'none';   
-                """,
+          document.querySelector('.ytp-title-channel')?.remove();   
+        """,
       );
     }
   }
@@ -307,13 +266,15 @@ class EmbedController {
   String _getHidenTitleJavaScript({bool hiden = true}) {
     if (hiden) {
       return """
-             document.querySelector('.ytp-title').style.display = 'none';
-             document.querySelector('.ytp-title-text').firstChild.text = '';
-            """;
+        document.querySelector('.ytp-title')?.style.setProperty('display','none');
+        if (document.querySelector('.ytp-title-text')) {
+          document.querySelector('.ytp-title-text').firstChild.textContent = '';
+        }
+      """;
     } else {
       return """
-             document.querySelector('.ytp-title').style.display = ''; 
-            """;
+        document.querySelector('.ytp-title')?.style.removeProperty('display'); 
+      """;
     }
   }
 }
