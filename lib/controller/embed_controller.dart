@@ -34,7 +34,11 @@ class EmbedController {
           [aria-label*="Share"],
           [aria-label*="مشاركة"],
           [aria-label*="More options"],
-          [aria-label*="خيارات إضافية"] {
+          [aria-label*="خيارات إضافية"],
+          tp-yt-paper-item:has(> .yt-simple-endpoint[title*="More options"]),
+          tp-yt-paper-item:has(> .yt-simple-endpoint[title*="خيارات إضافية"]),
+          .ytp-menuitem:has(.ytp-menuitem-label:contains("More options")),
+          .ytp-menuitem:has(.ytp-menuitem-label:contains("خيارات إضافية")) {
             display: none !important;
             visibility: hidden !important;
             pointer-events: none !important;
@@ -45,7 +49,9 @@ class EmbedController {
       }
 
       function blockClicks() {
-        document.querySelectorAll('.ytp-share-button, .ytp-overflow-button, [aria-label*="Share"], [aria-label*="مشاركة"]').forEach(btn => {
+        document.querySelectorAll(
+          '.ytp-share-button, .ytp-overflow-button, [aria-label*="Share"], [aria-label*="مشاركة"], [aria-label*="More options"], [aria-label*="خيارات إضافية"]'
+        ).forEach(btn => {
           btn.style.display = 'none';
           btn.onclick = (e) => { e.stopImmediatePropagation(); e.preventDefault(); return false; };
         });
@@ -59,9 +65,9 @@ class EmbedController {
       function deepClean(root) {
         if (!root) return;
         try {
-          root.querySelectorAll('.ytp-share-button,.ytp-overflow-button,[aria-label*="Share"],[aria-label*="مشاركة"],#bottom-sheet').forEach(el => {
-            el.remove();
-          });
+          root.querySelectorAll(
+            '.ytp-share-button,.ytp-overflow-button,[aria-label*="Share"],[aria-label*="مشاركة"],[aria-label*="More options"],[aria-label*="خيارات إضافية"],#bottom-sheet'
+          ).forEach(el => el.remove());
         } catch (e) {}
       }
 
@@ -74,12 +80,10 @@ class EmbedController {
         node.childNodes.forEach(observeShadowRoots);
       }
 
-      // Run once now
       injectGlobalStyle();
       blockClicks();
       nukeBottomSheet();
 
-      // Keep observing DOM
       const obs = new MutationObserver(() => {
         injectGlobalStyle();
         blockClicks();
@@ -88,7 +92,6 @@ class EmbedController {
       });
       obs.observe(document.documentElement, { childList: true, subtree: true });
 
-      // Also handle iframes (bottom sheet sometimes injected inside)
       document.querySelectorAll('iframe').forEach(frame => {
         try {
           const doc = frame.contentDocument || frame.contentWindow.document;
