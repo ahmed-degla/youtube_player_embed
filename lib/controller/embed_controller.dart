@@ -103,73 +103,75 @@ class EmbedController {
   Future<void> replaceSettingsWithCustomControls() async {
     await controller.evaluateJavascript(source: """
     (function() {
-      // Remove default settings button
-      const settingsBtn = document.querySelector('.ytp-settings-button');
-      if (settingsBtn) settingsBtn.remove();
+      function injectCustomButtons() {
+        const controls = document.querySelector('.ytp-right-controls');
+        if (!controls) return;
 
-      // Find the right controls container
-      const controls = document.querySelector('.ytp-right-controls');
-      if (!controls) return;
+        // Remove default settings button if it exists
+        const settingsBtn = controls.querySelector('.ytp-settings-button');
+        if (settingsBtn) settingsBtn.remove();
 
-      // Avoid duplicates
-      if (document.querySelector('#custom-speed-btn')) return;
+        // Avoid duplicates
+        if (document.querySelector('#custom-speed-btn') || document.querySelector('#custom-quality-btn')) return;
 
-      // Create Speed button
-      const speedBtn = document.createElement('button');
-      speedBtn.id = 'custom-speed-btn';
-      speedBtn.className = 'ytp-button';
-      speedBtn.innerHTML = '⚡'; // You can replace with SVG
-      speedBtn.title = 'Change Speed';
+        // Create Speed button
+        const speedBtn = document.createElement('button');
+        speedBtn.id = 'custom-speed-btn';
+        speedBtn.className = 'ytp-button';
+        speedBtn.innerHTML = '⚡';
+        speedBtn.title = 'Change Speed';
 
-      speedBtn.onclick = function(e) {
-        e.stopPropagation();
-        e.preventDefault();
-        const video = document.querySelector('video');
-        if (!video) return;
+        speedBtn.onclick = function(e) {
+          e.stopPropagation();
+          e.preventDefault();
+          const video = document.querySelector('video');
+          if (!video) return;
+          const speeds = [0.5, 1, 1.5, 2];
+          let idx = speeds.indexOf(video.playbackRate);
+          let next = speeds[(idx + 1) % speeds.length];
+          video.playbackRate = next;
+        };
 
-        // Cycle speeds: 1x -> 1.5x -> 2x -> back to 1x
-        const speeds = [1, 1.5, 2];
-        let current = video.playbackRate;
-        let idx = speeds.indexOf(current);
-        let next = speeds[(idx + 1) % speeds.length];
-        video.playbackRate = next;
-        alert('Speed set to ' + next + 'x');
-      };
+        // Create Quality button
+        const qualityBtn = document.createElement('button');
+        qualityBtn.id = 'custom-quality-btn';
+        qualityBtn.className = 'ytp-button';
+        qualityBtn.innerHTML = '📺';
+        qualityBtn.title = 'Change Quality';
 
-      // Create Quality button
-      const qualityBtn = document.createElement('button');
-      qualityBtn.id = 'custom-quality-btn';
-      qualityBtn.className = 'ytp-button';
-      qualityBtn.innerHTML = '📺';
-      qualityBtn.title = 'Change Quality';
+        qualityBtn.onclick = function(e) {
+          e.stopPropagation();
+          e.preventDefault();
+          // NOTE: true quality switching requires the YouTube IFrame API.
+          // For now we can just notify or attempt to force HD.
+          try {
+            ytplayer.config.args['vq'] = 'hd1080';
+            console.log("Quality forced to 1080p");
+          } catch(err) {
+            console.log("Quality change not supported in this embed");
+          }
+        };
 
-      qualityBtn.onclick = function(e) {
-        e.stopPropagation();
-        e.preventDefault();
-        // YouTube’s internal API is not public, but you can try force quality like this:
-        const player = document.querySelector('video');
-        if (!player) return;
-        // Force HD quality (depends on embed type, may not always work)
-        const qualities = ['hd1080','hd720','large','medium','small'];
-        let idx = Math.floor(Math.random() * qualities.length);
-        const chosen = qualities[idx];
-        try {
-          ytplayer.config.args['vq'] = chosen;
-          alert('Quality set to ' + chosen);
-        } catch(e) {
-          alert('Unable to set quality on this embed');
+        // Insert before fullscreen button
+        const fullscreenBtn = controls.querySelector('.ytp-fullscreen-button');
+        if (fullscreenBtn) {
+          controls.insertBefore(speedBtn, fullscreenBtn);
+          controls.insertBefore(qualityBtn, fullscreenBtn);
+        } else {
+          controls.appendChild(speedBtn);
+          controls.appendChild(qualityBtn);
         }
-      };
-
-      // Add both buttons before fullscreen button
-      const fullscreenBtn = document.querySelector('.ytp-fullscreen-button');
-      if (fullscreenBtn) {
-        controls.insertBefore(speedBtn, fullscreenBtn);
-        controls.insertBefore(qualityBtn, fullscreenBtn);
-      } else {
-        controls.appendChild(speedBtn);
-        controls.appendChild(qualityBtn);
       }
+
+      // Inject once
+      injectCustomButtons();
+
+      // Observe player bar for changes (so settings btn won’t come back)
+      const obs = new MutationObserver(() => {
+        injectCustomButtons();
+      });
+      const bar = document.querySelector('.ytp-right-controls');
+      if (bar) obs.observe(bar, { childList: true, subtree: true });
     })();
   """);
   }
