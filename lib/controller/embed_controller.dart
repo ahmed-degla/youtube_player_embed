@@ -103,8 +103,14 @@ class EmbedController {
   Future<void> forceHideSettingsButton() async {
     await controller.evaluateJavascript(source: """
     (function() {
-      const css = `
-        .ytp-settings-button {
+      const CSS = `
+        .ytp-settings-button,
+        [aria-label="Settings"],
+        [aria-label="الإعدادات"],
+        button[class*="ytp-settings-button"],
+        .ytp-settings-menu,
+        .ytp-panel-menu,
+        .ytp-popup.ytp-settings-menu {
           display: none !important;
           visibility: hidden !important;
           opacity: 0 !important;
@@ -119,29 +125,67 @@ class EmbedController {
       if (!document.getElementById('hide-settings-style')) {
         const style = document.createElement('style');
         style.id = 'hide-settings-style';
-        style.textContent = css;
+        style.textContent = CSS;
         document.head.appendChild(style);
       }
 
-      // MutationObserver to keep killing
-      const kill = () => {
-        document.querySelectorAll('.ytp-settings-button').forEach(el => {
-          el.style.setProperty('display', 'none', 'important');
-          el.style.setProperty('visibility', 'hidden', 'important');
-          el.style.setProperty('opacity', '0', 'important');
-          el.style.setProperty('pointer-events', 'none', 'important');
-          el.style.setProperty('width', '0', 'important');
-          el.style.setProperty('height', '0', 'important');
-          el.style.setProperty('overflow', 'hidden', 'important');
-        });
-      };
+      function killSettings(root=document) {
+        try {
+          root.querySelectorAll(
+            '.ytp-settings-button, ' +
+            '[aria-label="Settings"], ' +
+            '[aria-label="الإعدادات"], ' +
+            'button[class*="ytp-settings-button"], ' +
+            '.ytp-settings-menu, ' +
+            '.ytp-panel-menu, ' +
+            '.ytp-popup.ytp-settings-menu'
+          ).forEach(el => {
+            el.style.setProperty('display', 'none', 'important');
+            el.style.setProperty('visibility', 'hidden', 'important');
+            el.style.setProperty('opacity', '0', 'important');
+            el.style.setProperty('pointer-events', 'none', 'important');
+            el.style.setProperty('width', '0', 'important');
+            el.style.setProperty('height', '0', 'important');
+            el.style.setProperty('overflow', 'hidden', 'important');
+          });
+        } catch(e) {}
+      }
 
-      // Run once now
-      kill();
+      // Run now
+      killSettings();
 
-      // Keep watching for respawns
-      new MutationObserver(kill)
-        .observe(document.documentElement, { childList: true, subtree: true });
+      // Keep killing with MutationObserver
+      const obs = new MutationObserver(() => killSettings());
+      obs.observe(document.documentElement, { childList: true, subtree: true });
+
+      // Handle shadow roots
+      function observeShadowRoots(node) {
+        if (node.shadowRoot) {
+          new MutationObserver(() => killSettings(node.shadowRoot))
+            .observe(node.shadowRoot, { childList: true, subtree: true });
+        }
+        node.childNodes.forEach(observeShadowRoots);
+      }
+      document.querySelectorAll('*').forEach(observeShadowRoots);
+
+      // Handle iframes (cross-origin safe wrapped in try/catch)
+      document.querySelectorAll('iframe').forEach(frame => {
+        try {
+          const doc = frame.contentDocument || frame.contentWindow.document;
+          new MutationObserver(() => killSettings(doc))
+            .observe(doc, { childList: true, subtree: true });
+          killSettings(doc);
+        } catch(e){}
+      });
+
+      // Intercept clicks (failsafe)
+      document.addEventListener("click", e => {
+        if (e.target.closest('.ytp-settings-button,[aria-label="Settings"],[aria-label="الإعدادات"]')) {
+          e.stopImmediatePropagation();
+          e.preventDefault();
+          return false;
+        }
+      }, true);
     })();
   """);
   }
