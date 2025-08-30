@@ -104,8 +104,8 @@ class EmbedController {
     await controller.evaluateJavascript(source: """
     (function() {
       const KILL_SELECTORS = [
-        '.ytp-settings-button',                     // Settings gear
-        '.ytp-overflow-button',                     // Overflow (3 dots)
+        '.ytp-settings-button',
+        '.ytp-overflow-button',
         '[aria-label="Settings"]',
         '[aria-label="الإعدادات"]',
         '[aria-label="More options"]',
@@ -114,34 +114,20 @@ class EmbedController {
         'tp-yt-paper-item[title*="الإعدادات"]',
         'tp-yt-paper-item[title*="More options"]',
         'tp-yt-paper-item[title*="خيارات إضافية"]',
-        'tp-yt-paper-dialog',                       // Popup container
-        'tp-yt-iron-dropdown',
-        '#menu',
-        '#ytp-id-16',                               // dynamic menu IDs
-        '#ytp-id-17',
-        '#ytp-id-18',
-        '.ytp-popup',                               // any popup menu
+        'tp-yt-paper-dialog',
+        '.ytp-popup',
         '.ytp-panel-menu'
       ];
-
-      function nuke(root=document) {
-        KILL_SELECTORS.forEach(sel => {
-          try {
-            root.querySelectorAll(sel).forEach(el => el.remove());
-          } catch(e){}
-        });
-      }
 
       function cssHide() {
         const css = `
           .ytp-settings-button,
           .ytp-overflow-button,
           tp-yt-paper-dialog,
-          tp-yt-iron-dropdown,
-          tp-yt-paper-item[title*="More options"],
-          tp-yt-paper-item[title*="خيارات إضافية"],
           tp-yt-paper-item[title*="Settings"],
+          tp-yt-paper-item[title*="More options"],
           tp-yt-paper-item[title*="الإعدادات"],
+          tp-yt-paper-item[title*="خيارات إضافية"],
           .ytp-popup,
           .ytp-panel-menu {
             display: none !important;
@@ -161,41 +147,50 @@ class EmbedController {
         }
       }
 
-      // Run once
+      function nuke(root=document) {
+        KILL_SELECTORS.forEach(sel => {
+          try {
+            root.querySelectorAll(sel).forEach(el => {
+              // force remove
+              el.remove();
+            });
+          } catch(e){}
+        });
+      }
+
+      function forceCloseDialogs() {
+        document.querySelectorAll('tp-yt-paper-dialog').forEach(d => {
+          try {
+            d.remove(); // hard remove
+          } catch(e){}
+        });
+      }
+
       cssHide();
       nuke();
+      forceCloseDialogs();
 
-      // MutationObserver — keeps killing respawns
+      // Observer to kill respawns
       const obs = new MutationObserver(() => {
         cssHide();
         nuke();
+        forceCloseDialogs();
       });
       obs.observe(document.documentElement, { childList: true, subtree: true });
 
-      // Handle shadow roots
-      function observeShadowRoots(node) {
-        if (node.shadowRoot) {
-          new MutationObserver(() => {
-            cssHide();
-            nuke(node.shadowRoot);
-          }).observe(node.shadowRoot, { childList: true, subtree: true });
-        }
-        node.childNodes.forEach(observeShadowRoots);
-      }
-      document.querySelectorAll('*').forEach(observeShadowRoots);
+      // Also kill when attribute changes (dialog open/close)
+      const attrObs = new MutationObserver(() => forceCloseDialogs());
+      attrObs.observe(document.documentElement, { attributes: true, subtree: true });
 
-      // Handle iframes
-      document.querySelectorAll('iframe').forEach(frame => {
-        try {
-          const doc = frame.contentDocument || frame.contentWindow.document;
-          new MutationObserver(() => {
-            cssHide();
-            nuke(doc);
-          }).observe(doc, { childList: true, subtree: true });
-          cssHide();
-          nuke(doc);
-        } catch(e){}
-      });
+      // Intercept open() calls on dialog
+      const origOpen = HTMLDialogElement.prototype.show || function(){};
+      HTMLDialogElement.prototype.show = function() {
+        this.remove();
+      };
+      const origShowModal = HTMLDialogElement.prototype.showModal || function(){};
+      HTMLDialogElement.prototype.showModal = function() {
+        this.remove();
+      };
     })();
   """);
   }
