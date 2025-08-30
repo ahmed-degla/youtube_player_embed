@@ -100,92 +100,102 @@ class EmbedController {
     })();
     """);
   }
-  Future<void> forceHideSettingsButton() async {
+  Future<void> nukeSettingsAndMoreOptions() async {
     await controller.evaluateJavascript(source: """
     (function() {
-      const CSS = `
-        .ytp-settings-button,
-        [aria-label="Settings"],
-        [aria-label="الإعدادات"],
-        button[class*="ytp-settings-button"],
-        .ytp-settings-menu,
-        .ytp-panel-menu,
-        .ytp-popup.ytp-settings-menu {
-          display: none !important;
-          visibility: hidden !important;
-          opacity: 0 !important;
-          pointer-events: none !important;
-          width: 0 !important;
-          height: 0 !important;
-          overflow: hidden !important;
+      const KILL_SELECTORS = [
+        '.ytp-settings-button',                     // Settings gear
+        '.ytp-overflow-button',                     // Overflow (3 dots)
+        '[aria-label="Settings"]',
+        '[aria-label="الإعدادات"]',
+        '[aria-label="More options"]',
+        '[aria-label="خيارات إضافية"]',
+        'tp-yt-paper-item[title*="Settings"]',
+        'tp-yt-paper-item[title*="الإعدادات"]',
+        'tp-yt-paper-item[title*="More options"]',
+        'tp-yt-paper-item[title*="خيارات إضافية"]',
+        'tp-yt-paper-dialog',                       // Popup container
+        'tp-yt-iron-dropdown',
+        '#menu',
+        '#ytp-id-16',                               // dynamic menu IDs
+        '#ytp-id-17',
+        '#ytp-id-18',
+        '.ytp-popup',                               // any popup menu
+        '.ytp-panel-menu'
+      ];
+
+      function nuke(root=document) {
+        KILL_SELECTORS.forEach(sel => {
+          try {
+            root.querySelectorAll(sel).forEach(el => el.remove());
+          } catch(e){}
+        });
+      }
+
+      function cssHide() {
+        const css = `
+          .ytp-settings-button,
+          .ytp-overflow-button,
+          tp-yt-paper-dialog,
+          tp-yt-iron-dropdown,
+          tp-yt-paper-item[title*="More options"],
+          tp-yt-paper-item[title*="خيارات إضافية"],
+          tp-yt-paper-item[title*="Settings"],
+          tp-yt-paper-item[title*="الإعدادات"],
+          .ytp-popup,
+          .ytp-panel-menu {
+            display: none !important;
+            visibility: hidden !important;
+            opacity: 0 !important;
+            width: 0 !important;
+            height: 0 !important;
+            pointer-events: none !important;
+            overflow: hidden !important;
+          }
+        `;
+        if (!document.getElementById('yt-hide-style')) {
+          const style = document.createElement('style');
+          style.id = 'yt-hide-style';
+          style.textContent = css;
+          document.head.appendChild(style);
         }
-      `;
-
-      // Inject CSS once
-      if (!document.getElementById('hide-settings-style')) {
-        const style = document.createElement('style');
-        style.id = 'hide-settings-style';
-        style.textContent = CSS;
-        document.head.appendChild(style);
       }
 
-      function killSettings(root=document) {
-        try {
-          root.querySelectorAll(
-            '.ytp-settings-button, ' +
-            '[aria-label="Settings"], ' +
-            '[aria-label="الإعدادات"], ' +
-            'button[class*="ytp-settings-button"], ' +
-            '.ytp-settings-menu, ' +
-            '.ytp-panel-menu, ' +
-            '.ytp-popup.ytp-settings-menu'
-          ).forEach(el => {
-            el.style.setProperty('display', 'none', 'important');
-            el.style.setProperty('visibility', 'hidden', 'important');
-            el.style.setProperty('opacity', '0', 'important');
-            el.style.setProperty('pointer-events', 'none', 'important');
-            el.style.setProperty('width', '0', 'important');
-            el.style.setProperty('height', '0', 'important');
-            el.style.setProperty('overflow', 'hidden', 'important');
-          });
-        } catch(e) {}
-      }
+      // Run once
+      cssHide();
+      nuke();
 
-      // Run now
-      killSettings();
-
-      // Keep killing with MutationObserver
-      const obs = new MutationObserver(() => killSettings());
+      // MutationObserver — keeps killing respawns
+      const obs = new MutationObserver(() => {
+        cssHide();
+        nuke();
+      });
       obs.observe(document.documentElement, { childList: true, subtree: true });
 
       // Handle shadow roots
       function observeShadowRoots(node) {
         if (node.shadowRoot) {
-          new MutationObserver(() => killSettings(node.shadowRoot))
-            .observe(node.shadowRoot, { childList: true, subtree: true });
+          new MutationObserver(() => {
+            cssHide();
+            nuke(node.shadowRoot);
+          }).observe(node.shadowRoot, { childList: true, subtree: true });
         }
         node.childNodes.forEach(observeShadowRoots);
       }
       document.querySelectorAll('*').forEach(observeShadowRoots);
 
-      // Handle iframes (cross-origin safe wrapped in try/catch)
+      // Handle iframes
       document.querySelectorAll('iframe').forEach(frame => {
         try {
           const doc = frame.contentDocument || frame.contentWindow.document;
-          new MutationObserver(() => killSettings(doc))
-            .observe(doc, { childList: true, subtree: true });
-          killSettings(doc);
+          new MutationObserver(() => {
+            cssHide();
+            nuke(doc);
+          }).observe(doc, { childList: true, subtree: true });
+          cssHide();
+          nuke(doc);
         } catch(e){}
       });
-
-      // Intercept clicks (failsafe)
-      document.addEventListener("click", e => {
-        if (e.target.closest('.ytp-settings-button,[aria-label="Settings"],[aria-label="الإعدادات"]')) {
-          e.stopImmediatePropagation();
-          e.preventDefault();
-          return false;
-        }
-      }, true);
     })();
   """);
   }
